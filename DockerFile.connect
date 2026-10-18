@@ -1,0 +1,19 @@
+FROM apache/kafka:3.8.0
+
+# Switch to root to install dependencies and manage directories
+USER root
+
+# Create a directory for connector plugins
+RUN mkdir -p /opt/kafka/plugins
+
+# Download Debezium source and JDBC sink plugins, plus the PostgreSQL JDBC driver.
+RUN wget -q -t 3 -O /tmp/debezium-postgres.tar.gz \
+        https://repo1.maven.org/maven2/io/debezium/debezium-connector-postgres/3.0.8.Final/debezium-connector-postgres-3.0.8.Final-plugin.tar.gz && \
+    tar -xzf /tmp/debezium-postgres.tar.gz -C /opt/kafka/plugins/ && \
+    wget -q -t 3 -O /tmp/debezium-jdbc.tar.gz \
+        https://repo1.maven.org/maven2/io/debezium/debezium-connector-jdbc/3.0.8.Final/debezium-connector-jdbc-3.0.8.Final-plugin.tar.gz && \
+    tar -xzf /tmp/debezium-jdbc.tar.gz -C /opt/kafka/plugins/ && \
+    rm /tmp/debezium-postgres.tar.gz /tmp/debezium-jdbc.tar.gz
+
+# Switch back to the base image's non-root user
+USER appuser
