@@ -1,0 +1,25 @@
+
+{
+  "name": "postgres-source",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "tasks.max": "1",
+
+    "database.hostname": "postgres-source",
+    "database.port": "5432",
+    "database.user": "postgres",
+    "database.password": "postgres",
+    "database.dbname": "appdb",
+
+    "topic.prefix": "cdc",
+    "plugin.name": "pgoutput",
+
+    "schema.include.list": "public",
+
+    "publication.name": "dbz_publication",
+    "publication.autocreate.mode": "all_tables",
+
+    "slot.name": "debezium_appdb",
+    "snapshot.mode": "initial"
+  }
+}

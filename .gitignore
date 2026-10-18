@@ -1,0 +1,21 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Docker bind-mounted database and broker state
+/source_data/
+/target_data/
+/kafka_data/
+/pgadmin_data/
+
+# Local credentials and logs
+.env
+.env.*
+!.env.example
+*.log
+
+# OS-generated files
+.DS_Store

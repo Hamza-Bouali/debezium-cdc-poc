@@ -1,0 +1,90 @@
+services:
+  postgres-source:
+    image: postgres:16
+    container_name: postgres-source
+    command: ["postgres", "-c", "wal_level=logical"]
+    environment:
+      POSTGRES_DB: appdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./source_data:/var/lib/postgresql/data
+      - ./source/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  postgres-target:
+    image: postgres:16
+    container_name: postgres-target
+    environment:
+      POSTGRES_DB: appdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5434:5432"
+    volumes:
+      - ./target_data:/var/lib/postgresql/data
+
+  kafka:
+    image: quay.io/debezium/kafka:3.7
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+      NODE_ID: 1
+      NODE_ROLE: combined
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_LISTENERS: "PLAINTEXT://kafka:9092,CONTROLLER://kafka:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    volumes:
+      - ./kafka_data:/var/lib/kafka/data 
+
+  connect:
+    image: quay.io/debezium/connect:3.7
+    container_name: kafka-connect
+    ports:
+      - "8083:8083"
+    depends_on:
+      - kafka
+      - postgres-source
+      - postgres-target
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: "1"
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+      STATUS_STORAGE_TOPIC: connect_statuses
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_CONSUMER_METADATA_MAX_AGE_MS: 5000
+    volumes:
+      - ./connect_plugins:/var/lib/kafka/plugins
+  
+  pgadmin:
+    image: dpage/pgadmin4
+    ports:
+      - 5050:80
+    depends_on:
+      - postgres-source
+      - postgres-target
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@gmail.com
+      - PGADMIN_DEFAULT_PASSWORD=admin@gmail.com
+    volumes:
+      - ./pgadmin_data:/var/lib/pgadmin
+
+
+volumes:
+  source_data: 
+  pgadmin_data:
+  target_data:
+  connect_plugins:
+  kafka_data:
