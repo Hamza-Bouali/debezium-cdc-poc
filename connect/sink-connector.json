@@ -5,9 +5,9 @@
     "connector.class": "io.debezium.connector.jdbc.JdbcSinkConnector",
     "tasks.max": "1",
 
-    "connection.url": "jdbc:postgresql://postgres-target:5432/appdb",
-    "connection.username": "postgres",
-    "connection.password": "postgres",
+    "connection.url": "jdbc:postgresql://${env:DB_TARGET_HOST}:${env:DB_TARGET_PORT}/${env:DB_TARGET_NAME}",
+    "connection.username": "${env:DB_TARGET_USER}",
+    "connection.password": "${env:DB_TARGET_PASSWORD}",
 
     "topics.regex": "cdc\\.public\\..*",
 

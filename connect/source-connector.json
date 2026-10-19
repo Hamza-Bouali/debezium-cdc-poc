@@ -5,11 +5,11 @@
     "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
     "tasks.max": "1",
 
-    "database.hostname": "postgres-source",
-    "database.port": "5432",
-    "database.user": "postgres",
-    "database.password": "postgres",
-    "database.dbname": "appdb",
+    "database.hostname": "${env:DB_SOURCE_HOST}",
+    "database.port": "${env:DB_SOURCE_PORT}",
+    "database.user": "${env:DB_SOURCE_USER}",
+    "database.password": "${env:DB_SOURCE_PASSWORD}",
+    "database.dbname": "${env:DB_SOURCE_NAME}",
 
     "topic.prefix": "cdc",
     "plugin.name": "pgoutput",

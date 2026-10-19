@@ -4,9 +4,9 @@ services:
     container_name: postgres-source
     command: ["postgres", "-c", "wal_level=logical"]
     environment:
-      POSTGRES_DB: appdb
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${DB_SOURCE_NAME:-appdb}
+      POSTGRES_USER: ${DB_SOURCE_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_SOURCE_PASSWORD:-postgres}
     ports:
       - "5433:5432"
     volumes:
@@ -17,9 +17,9 @@ services:
     image: postgres:16
     container_name: postgres-target
     environment:
-      POSTGRES_DB: appdb
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${DB_TARGET_NAME:-appdb}
+      POSTGRES_USER: ${DB_TARGET_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_TARGET_PASSWORD:-postgres}
     ports:
       - "5434:5432"
     volumes:
@@ -65,6 +65,18 @@ services:
       OFFSET_STORAGE_REPLICATION_FACTOR: 1
       STATUS_STORAGE_REPLICATION_FACTOR: 1
       CONNECT_CONSUMER_METADATA_MAX_AGE_MS: 5000
+      CONNECT_CONFIG_PROVIDERS: env
+      CONNECT_CONFIG_PROVIDERS_ENV_CLASS: org.apache.kafka.common.config.provider.EnvVarConfigProvider
+      DB_SOURCE_HOST: ${DB_SOURCE_HOST:-postgres-source}
+      DB_SOURCE_PORT: ${DB_SOURCE_PORT:-5432}
+      DB_SOURCE_USER: ${DB_SOURCE_USER:-postgres}
+      DB_SOURCE_PASSWORD: ${DB_SOURCE_PASSWORD:-postgres}
+      DB_SOURCE_NAME: ${DB_SOURCE_NAME:-appdb}
+      DB_TARGET_HOST: ${DB_TARGET_HOST:-postgres-target}
+      DB_TARGET_PORT: ${DB_TARGET_PORT:-5432}
+      DB_TARGET_USER: ${DB_TARGET_USER:-postgres}
+      DB_TARGET_PASSWORD: ${DB_TARGET_PASSWORD:-postgres}
+      DB_TARGET_NAME: ${DB_TARGET_NAME:-appdb}
     volumes:
       - ./connect_plugins:/var/lib/kafka/plugins
   
