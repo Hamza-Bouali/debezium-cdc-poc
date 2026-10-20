@@ -226,6 +226,32 @@ def test_insert_update_delete_replicate_to_target(customer_test_ids):
     )
 
 
+def test_connect_restart_recovery(customer_test_ids):
+    """Verify changes made while Connect is stopped arrive after restart."""
+    customer_id = customer_test_ids[0]
+    expected = [f"{customer_id}|Recovery Check|recovery-{customer_id}@example.com"]
+
+    subprocess.run(["docker", "stop", "kafka-connect"], check=True, timeout=30)
+    try:
+        psql(
+            SOURCE,
+            f"INSERT INTO public.customers (id, name, email) "
+            f"VALUES ({customer_id}, 'Recovery Check', "
+            f"'recovery-{customer_id}@example.com');",
+        )
+    finally:
+        subprocess.run(["docker", "start", "kafka-connect"], check=True, timeout=30)
+
+    wait_until(
+        "CDC resumes after Kafka Connect restart",
+        lambda: customer_rows(TARGET, [customer_id]) == expected,
+        timeout=180,
+    )
+
+    assert customer_rows(SOURCE, [customer_id]) == expected
+    assert customer_rows(TARGET, [customer_id]) == expected
+
+
 @pytest.mark.dynamic_table
 def test_dynamic_table_auto_creation_and_cdc():
     """
