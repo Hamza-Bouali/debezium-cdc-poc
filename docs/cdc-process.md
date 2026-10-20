@@ -14,13 +14,31 @@ It verifies row-level `INSERT`, `UPDATE`, and `DELETE` replication, plus automat
 ## Prerequisites
 
 - Docker Engine and Docker Compose
+- GNU Make
 - Python 3.12 or a compatible version
 - `curl`
-- The Python dependencies in `requirements.txt`
+- A local `.env` file created from `.env.example`
+
+## Start and Operate with Make
+
+Create the ignored local environment file and set local-only passwords before starting the stack:
+
+```bash
+cp .env.example .env
+```
+
+Then use Make to install the Python dependencies, validate Compose, wait for healthy services, and create or update both connectors:
+
+```bash
+make up
+make status
+```
+
+`make down` stops the containers while retaining local data. `make clean` permanently removes the containers and local persisted data directories; use it only when that data can be discarded. Run `make help` to see all targets.
 
 ## Start the Stack
 
-From the repository root, start the services:
+The `make up` target starts the services with `docker compose up --wait`. For manual startup:
 
 ```bash
 docker compose up -d
@@ -37,7 +55,7 @@ curl --retry 30 --retry-connrefused --retry-delay 2 --fail http://localhost:8083
 
 ## Register Connectors
 
-Register the source and sink connectors from their checked-in configuration files:
+`make up` registers both connectors idempotently: it creates missing connectors and updates existing ones from the checked-in configuration files. To register them manually instead:
 
 ```bash
 curl -i -X POST \
@@ -73,7 +91,9 @@ python -m pip install -r requirements.txt
 pytest -s -v tests/test_cdc_e2e.py
 ```
 
-The tests use Docker containers and the local Connect REST API. They verify replication of row changes and dynamic source-table creation. The dynamic-table test creates a uniquely named table, waits for its target copy, exercises changes, and removes the test tables afterward.
+The tests use Docker containers and the local Connect REST API. They verify replication of row changes, dynamic source-table creation, and recovery after Kafka Connect restarts while a source change is made. The dynamic-table test creates a uniquely named table, waits for its target copy, exercises changes, and removes the test tables afterward.
+
+Run only the recovery test with `make test-recovery`.
 
 ## Observe the Data Path
 
@@ -85,6 +105,29 @@ List topics and inspect connector logs with:
 docker exec kafka /kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
 docker logs --follow --timestamps kafka-connect
 ```
+
+To inspect up to ten raw Debezium records, including timestamp, partition, offset, and key:
+
+```bash
+make trace TABLE=customers
+```
+
+The output value is the Debezium change event. Its `payload.op` identifies the operation (`c` create/insert, `u` update, `d` delete, or `r` snapshot read); `payload.before` and `payload.after` show row state when present. The Kafka key identifies the row, and the record metadata identifies its topic, partition, offset, and timestamp. The connector configurations do not enable a heartbeat or transaction metadata stream, so this trace shows row changes, not complete transaction-level lineage.
+
+## Measure a Batch
+
+Run a local insert-and-convergence measurement:
+
+```bash
+make benchmark
+make benchmark BENCH_ROWS=10000
+```
+
+The script reports end-to-end batch latency and effective rows per second, then removes the generated source and target rows. Record the row count, host resources, Docker versions, and environment when comparing runs. This is a simple local POC measurement, not a controlled benchmark or a production capacity claim. CI checks correctness but does not gate on benchmark timing.
+
+## Continuous Integration
+
+GitHub Actions validates the Compose model and runs the end-to-end suite on pushes and pull requests. It uses the `.env.example` local-demo values and reports Compose logs if the job fails. The workflow needs a Linux runner with Docker Compose available.
 
 The Connect worker sets `CONNECT_CONSUMER_METADATA_MAX_AGE_MS=5000` so the sink consumer refreshes topic metadata frequently enough to discover tables created after the sink starts. This setting was verified by the dynamic-table integration test.
 
@@ -100,6 +143,6 @@ The ignored bind-mounted data directories remain on disk and will be reused next
 
 ## Configuration and Security Notes
 
-The checked-in connector JSON and Compose file use local demonstration credentials. Do not reuse these credentials or expose the services publicly. For a shared or deployed environment, move secrets out of source control, restrict network access, and design availability, monitoring, recovery, retention, and throughput requirements before relying on the pipeline.
+Connector credentials and pgAdmin credentials are loaded from the ignored `.env` file. The values in `.env.example` are local-demo placeholders, not production secrets. Replace them for local use and never expose these unauthenticated development services publicly. For a shared or deployed environment, use a secret manager, restrict network access, and design availability, monitoring, recovery, retention, and throughput requirements before relying on the pipeline.
 
 Architecture decisions and their rationale are recorded in [the ADR directory](adr/README.md).
