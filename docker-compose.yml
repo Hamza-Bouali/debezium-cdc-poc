@@ -6,7 +6,12 @@ services:
     environment:
       POSTGRES_DB: ${DB_SOURCE_NAME:-appdb}
       POSTGRES_USER: ${DB_SOURCE_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_SOURCE_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${DB_SOURCE_PASSWORD:?Set DB_SOURCE_PASSWORD in .env}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     ports:
       - "5433:5432"
     volumes:
@@ -19,7 +24,12 @@ services:
     environment:
       POSTGRES_DB: ${DB_TARGET_NAME:-appdb}
       POSTGRES_USER: ${DB_TARGET_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_TARGET_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${DB_TARGET_PASSWORD:?Set DB_TARGET_PASSWORD in .env}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     ports:
       - "5434:5432"
     volumes:
@@ -43,6 +53,12 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/kafka/9092'"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
     volumes:
       - ./kafka_data:/var/lib/kafka/data 
 
@@ -52,9 +68,12 @@ services:
     ports:
       - "8083:8083"
     depends_on:
-      - kafka
-      - postgres-source
-      - postgres-target
+      kafka:
+        condition: service_healthy
+      postgres-source:
+        condition: service_healthy
+      postgres-target:
+        condition: service_healthy
     environment:
       BOOTSTRAP_SERVERS: kafka:9092
       GROUP_ID: "1"
@@ -70,26 +89,32 @@ services:
       DB_SOURCE_HOST: ${DB_SOURCE_HOST:-postgres-source}
       DB_SOURCE_PORT: ${DB_SOURCE_PORT:-5432}
       DB_SOURCE_USER: ${DB_SOURCE_USER:-postgres}
-      DB_SOURCE_PASSWORD: ${DB_SOURCE_PASSWORD:-postgres}
+      DB_SOURCE_PASSWORD: ${DB_SOURCE_PASSWORD:?Set DB_SOURCE_PASSWORD in .env}
       DB_SOURCE_NAME: ${DB_SOURCE_NAME:-appdb}
       DB_TARGET_HOST: ${DB_TARGET_HOST:-postgres-target}
       DB_TARGET_PORT: ${DB_TARGET_PORT:-5432}
       DB_TARGET_USER: ${DB_TARGET_USER:-postgres}
-      DB_TARGET_PASSWORD: ${DB_TARGET_PASSWORD:-postgres}
+      DB_TARGET_PASSWORD: ${DB_TARGET_PASSWORD:?Set DB_TARGET_PASSWORD in .env}
       DB_TARGET_NAME: ${DB_TARGET_NAME:-appdb}
     volumes:
       - ./connect_plugins:/var/lib/kafka/plugins
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8083/connectors >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
   
   pgadmin:
-    image: dpage/pgadmin4
+    image: dpage/pgadmin4:9
     ports:
       - 5050:80
     depends_on:
       - postgres-source
       - postgres-target
     environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@gmail.com
-      - PGADMIN_DEFAULT_PASSWORD=admin@gmail.com
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?Set PGADMIN_PASSWORD in .env}
     volumes:
       - ./pgadmin_data:/var/lib/pgadmin
 
