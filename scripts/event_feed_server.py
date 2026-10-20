@@ -6,7 +6,7 @@ import json
 import os
 import re
 import subprocess
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -17,33 +17,40 @@ TABLE_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 
 def parse_event_line(line, table, topic):
-    columns = line.split("\t")
     event = {"table": table, "topic": topic, "raw": line}
+    metadata = re.search(r"CreateTime:(\d+)\s+Partition:(\d+)\s+Offset:(\d+)", line)
+    if metadata:
+        event["timestamp"], event["partition"], event["offset"] = metadata.groups()
 
-    for column in columns:
-        if column.startswith("CreateTime:"):
-            event["timestamp"] = column.partition(":")[2]
-        elif column.startswith("Partition:"):
-            event["partition"] = column.partition(":")[2]
-        elif column.startswith("Offset:"):
-            event["offset"] = column.partition(":")[2]
-
-    if len(columns) >= 6:
+    decoder = json.JSONDecoder()
+    records = []
+    search_from = 0
+    while len(records) < 2:
+        start = line.find("{", search_from)
+        if start < 0:
+            break
         try:
-            key = json.loads(columns[-2])
-            event["key"] = key.get("payload") if isinstance(key, dict) else key
-        except (json.JSONDecodeError, AttributeError):
-            event["key"] = columns[-2]
+            record, end = decoder.raw_decode(line, start)
+        except json.JSONDecodeError:
+            search_from = start + 1
+            continue
+        if isinstance(record, dict) and "payload" in record:
+            records.append(record)
+        search_from = end
 
-        try:
-            value = json.loads(columns[-1])
-            payload = value.get("payload", {}) if isinstance(value, dict) else {}
-            event["operation"] = payload.get("op")
-            event["before"] = payload.get("before")
-            event["after"] = payload.get("after")
-            event["source_timestamp"] = payload.get("ts_ms")
-        except (json.JSONDecodeError, AttributeError):
-            event["operation"] = None
+    if records:
+        key_payload = records[0].get("payload")
+        event["key"] = key_payload
+    if len(records) > 1:
+        payload = records[1].get("payload") or {}
+        event["operation"] = payload.get("op")
+        event["before"] = payload.get("before")
+        event["after"] = payload.get("after")
+        event["source_timestamp"] = payload.get("ts_ms")
+    elif records and line.rstrip().endswith("null"):
+        event["operation"] = "tombstone"
+        event["before"] = None
+        event["after"] = None
 
     return event
 
@@ -81,34 +88,34 @@ def fetch_events(table, limit=20):
     for partition, end_offset in partitions:
         start_offset = max(0, end_offset - limit)
         cmd = [
-        "docker",
-        "exec",
-        "kafka",
-        "/kafka/bin/kafka-console-consumer.sh",
-        "--bootstrap-server",
-        "kafka:9092",
-        "--topic",
-        topic,
-        "--partition",
-        str(partition),
-        "--offset",
-        str(start_offset),
-        "--max-messages",
-        str(limit),
-        "--timeout-ms",
-        "1000",
-        "--formatter-property",
-        "print.timestamp=true",
-        "--formatter-property",
-        "print.key=true",
-        "--formatter-property",
-        "print.headers=true",
-        "--formatter-property",
-        "print.offset=true",
-        "--formatter-property",
-        "print.partition=true",
-        "--formatter-property",
-        "print.value=true",
+            "docker",
+            "exec",
+            "kafka",
+            "/kafka/bin/kafka-console-consumer.sh",
+            "--bootstrap-server",
+            "kafka:9092",
+            "--topic",
+            topic,
+            "--partition",
+            str(partition),
+            "--offset",
+            str(start_offset),
+            "--max-messages",
+            str(limit),
+            "--timeout-ms",
+            "1000",
+            "--formatter-property",
+            "print.timestamp=true",
+            "--formatter-property",
+            "print.key=true",
+            "--formatter-property",
+            "print.headers=true",
+            "--formatter-property",
+            "print.offset=true",
+            "--formatter-property",
+            "print.partition=true",
+            "--formatter-property",
+            "print.value=true",
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
         lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
@@ -141,7 +148,6 @@ class EventFeedHandler(BaseHTTPRequestHandler):
                 status = 400 if isinstance(error, ValueError) else 502
             payload = json.dumps(response).encode("utf-8")
             self.send_response(status)
-            self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
@@ -156,7 +162,7 @@ class EventFeedHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
-    def log_message(self, fmt, *args):
+    def log_message(self, format, *args):
         return
 
 
@@ -172,7 +178,7 @@ def main():
         def __init__(self, *p, **kw):
             super().__init__(*p, **kw)
 
-    httpd = HTTPServer((args.listen_host, args.port), Handler)
+    httpd = ThreadingHTTPServer((args.listen_host, args.port), Handler)
     print(f"Serving event feed on http://{args.listen_host}:{args.port}")
     httpd.serve_forever()
 

@@ -15,7 +15,7 @@ help:
 	  'make down           Stop the stack and retain persisted data' \
 	  'make status         Show service and connector status' \
 	  'make observability  Start metrics and dashboards (Prometheus/Grafana)' \
-	  'make event-ui       Start the live source-event UI on http://localhost:8001' \
+	  'make event-ui       Start the live source-event UI (EVENT_UI_PORT=8001)' \
 	  'make test           Run all CDC end-to-end tests' \
 	  'make test-recovery  Run the Connect restart/recovery test' \
 	  'make benchmark      Measure batch replication (BENCH_ROWS=1000)' \
@@ -40,8 +40,9 @@ observability:
 	@printf '%s\n' 'Prometheus: http://localhost:9090' 'Grafana: http://localhost:3000 (admin/admin by default)' 'Metrics exporter: http://localhost:8000/metrics'
 
 event-ui:
-	docker compose up -d event-ui
-	@printf '%s\n' 'Event UI: http://localhost:8001'
+	docker compose up -d kafka
+	@printf '%s\n' 'Event UI: http://localhost:$(EVENT_UI_PORT)'
+	$(PYTHON) scripts/event_feed_server.py --listen-host 0.0.0.0 --port $(EVENT_UI_PORT)
 
 migrate-source:
 	docker compose exec -T postgres-source sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < source/updated_at.sql
