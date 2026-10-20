@@ -1,4 +1,4 @@
-.PHONY: help install up migrate-source down logs status connectors test test-recovery benchmark trace config clean observability event-ui
+.PHONY: help install up migrate-source down logs status connectors test test-recovery benchmark trace config clean observability event-ui generate-events
 
 PYTHON ?= python3
 VENV := .venv/bin/python
@@ -7,6 +7,8 @@ TABLE ?= customers
 BENCH_ROWS ?= 1000
 TRACE_MAX_MESSAGES ?= 10
 EVENT_UI_PORT ?= 8001
+EVENT_COUNT ?= 12
+EVENT_INTERVAL ?= 1
 
 help:
 	@printf '%s\n' \
@@ -16,6 +18,7 @@ help:
 	  'make status         Show service and connector status' \
 	  'make observability  Start metrics and dashboards (Prometheus/Grafana)' \
 	  'make event-ui       Start the live source-event UI (EVENT_UI_PORT=8001)' \
+	  'make generate-events Create source changes (TABLE=customers, EVENT_COUNT=3)' \
 	  'make test           Run all CDC end-to-end tests' \
 	  'make test-recovery  Run the Connect restart/recovery test' \
 	  'make benchmark      Measure batch replication (BENCH_ROWS=1000)' \
@@ -43,6 +46,9 @@ event-ui:
 	docker compose up -d kafka
 	@printf '%s\n' 'Event UI: http://localhost:$(EVENT_UI_PORT)'
 	$(PYTHON) scripts/event_feed_server.py --listen-host 0.0.0.0 --port $(EVENT_UI_PORT)
+
+generate-events:
+	$(PYTHON) scripts/generate_cdc_events.py --table $(TABLE) --count $(EVENT_COUNT) --interval $(EVENT_INTERVAL)
 
 migrate-source:
 	docker compose exec -T postgres-source sh -c 'psql -v ON_ERROR_STOP=1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"' < source/updated_at.sql
