@@ -46,6 +46,8 @@ docker compose up -d
 
 The stack includes PostgreSQL source and target databases, Kafka, Kafka Connect, and pgAdmin. Database data and Kafka state are stored in local bind-mounted directories ignored by Git. The first startup may take a little time while containers initialize.
 
+`make up` also applies `source/updated_at.sql` to the source database. It sets an insert default and a `BEFORE UPDATE` trigger on each public table present at migration time that has an `updated_at` column. The migration is safe to rerun. If you later add another table with this column, run `make migrate-source` to install the trigger for it.
+
 Check service state and wait until Connect responds:
 
 ```bash

@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CDC Event Feed</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #111b2a;
+      --muted: #8aa0b8;
+      --line: #233349;
+      --accent: #5eead4;
+      --accent-2: #7dd3fc;
+      --text: #e5eef9;
+      --warn: #fbbf24;
+      --danger: #f87171;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, #0b1220, #111827);
+      color: var(--text);
+      font-family: Arial, sans-serif;
+    }
+    .wrap {
+      max-width: 1100px;
+      margin: 32px auto;
+      padding: 0 16px;
+    }
+    .toolbar {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      padding: 16px 18px;
+      background: rgba(17, 27, 42, 0.95);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .title {
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+    .controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    select, button {
+      background: #0f172a;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 0.95rem;
+    }
+    button {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #092033;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .stat {
+      background: rgba(17, 27, 42, 0.9);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .label {
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .value {
+      font-size: 1.8rem;
+      font-weight: 700;
+    }
+    .events {
+      display: grid;
+      gap: 14px;
+    }
+    .event {
+      background: rgba(17, 27, 42, 0.9);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px 18px;
+      overflow-wrap: anywhere;
+    }
+    .meta {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin-bottom: 10px;
+    }
+    .pill {
+      background: rgba(94, 234, 212, 0.12);
+      border: 1px solid rgba(94, 234, 212, 0.35);
+      border-radius: 999px;
+      padding: 4px 8px;
+      color: var(--accent);
+    }
+    .json {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      color: #dbeafe;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+    .empty {
+      color: var(--muted);
+      text-align: center;
+      padding: 30px;
+      border: 1px dashed var(--line);
+      border-radius: 12px;
+      background: rgba(17, 27, 42, 0.5);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="toolbar">
+      <div class="title">CDC Event Feed</div>
+      <div class="controls">
+        <label for="tableSelect">Table</label>
+        <select id="tableSelect">
+          <option value="customers">customers</option>
+          <option value="orders">orders</option>
+        </select>
+        <button id="refreshBtn">Refresh</button>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="label">Table</div>
+        <div class="value" id="tableName">customers</div>
+      </div>
+      <div class="stat">
+        <div class="label">Latest offset</div>
+        <div class="value" id="latestOffset">-</div>
+      </div>
+      <div class="stat">
+        <div class="label">Messages</div>
+        <div class="value" id="messageCount">0</div>
+      </div>
+    </div>
+
+    <div id="eventsList" class="events"></div>
+  </div>
+
+  <script>
+    const tableSelect = document.getElementById('tableSelect');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const eventsList = document.getElementById('eventsList');
+    const tableName = document.getElementById('tableName');
+    const latestOffset = document.getElementById('latestOffset');
+    const messageCount = document.getElementById('messageCount');
+
+    async function loadEvents() {
+      const table = tableSelect.value;
+      tableName.textContent = table;
+      try {
+        const resp = await fetch(`/api/events?table=${table}&limit=20`);
+        const events = await resp.json();
+        if (!events.length) {
+          eventsList.innerHTML = '<div class="empty">No events yet for this table.</div>';
+          latestOffset.textContent = '-';
+          messageCount.textContent = '0';
+          return;
+        }
+
+        const latest = events[0];
+        latestOffset.textContent = latest.offset || '-';
+        messageCount.textContent = String(events.length);
+
+        eventsList.innerHTML = events.map((event, idx) => {
+          const safeRaw = event.raw ? event.raw.replace(/</g, '&lt;').replace(/>/g, '&gt;') : '';
+          return `
+            <div class="event">
+              <div class="meta">
+                <span class="pill">#${events.length - idx}</span>
+                <span>partition ${event.partition || 'n/a'}</span>
+                <span>offset ${event.offset || 'n/a'}</span>
+                <span>timestamp ${event.timestamp || 'n/a'}</span>
+              </div>
+              <div class="json">${safeRaw}</div>
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        eventsList.innerHTML = '<div class="empty">Unable to load events. Check the Kafka topic and connector state.</div>';
+      }
+    }
+
+    tableSelect.addEventListener('change', loadEvents);
+    refreshBtn.addEventListener('click', loadEvents);
+    loadEvents();
+    setInterval(loadEvents, 5000);
+  </script>
+</body>
+</html>

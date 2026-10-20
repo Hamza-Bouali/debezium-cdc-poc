@@ -1,0 +1,29 @@
+groups:
+  - name: cdc.rules
+    rules:
+      - alert: KafkaConnectConnectorDown
+        expr: kafka_connect_connector_up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Kafka Connect connector is down
+          description: A Kafka Connect connector is not running; health checks must be restored.
+
+      - alert: KafkaConnectTaskNotRunning
+        expr: kafka_connect_task_state{state="RUNNING"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Kafka Connect task is not running
+          description: A Kafka Connect task is not in RUNNING state and may be stalled or failed.
+
+      - alert: KafkaConsumerLagHigh
+        expr: sum by (group, topic) (kafka_consumer_group_lag) > 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Kafka consumer lag is elevated
+          description: Kafka lag is above the expected threshold for the consumer group {{ $labels.group }} on topic {{ $labels.topic }}.

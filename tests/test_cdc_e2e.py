@@ -117,6 +117,15 @@ def customer_rows(container, ids):
     )
 
 
+def customer_updated_at(container, customer_id):
+    return psql(
+        container,
+        "SELECT to_char(updated_at AT TIME ZONE 'UTC', "
+        "'YYYY-MM-DD\"T\"HH24:MI:SS.US') "
+        f"FROM public.customers WHERE id = {customer_id};",
+    )
+
+
 @pytest.fixture
 def customer_test_ids():
     """Reserve three fresh IDs and remove only those IDs afterward."""
@@ -189,6 +198,7 @@ def test_insert_update_delete_replicate_to_target(customer_test_ids):
     )
 
     # UPDATE: change one record in the source.
+    previous_updated_at = customer_updated_at(SOURCE, id2)
     psql(
         SOURCE,
         f"""
@@ -208,7 +218,10 @@ def test_insert_update_delete_replicate_to_target(customer_test_ids):
     wait_until(
         "UPDATE replicated",
         lambda: customer_rows(SOURCE, customer_test_ids) == updated
-        and customer_rows(TARGET, customer_test_ids) == updated,
+        and customer_rows(TARGET, customer_test_ids) == updated
+        and customer_updated_at(SOURCE, id2) > previous_updated_at
+        and customer_updated_at(TARGET, id2)
+        == customer_updated_at(SOURCE, id2),
     )
 
     # DELETE: delete one record and check that the sink removes it.

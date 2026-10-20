@@ -17,6 +17,7 @@ services:
     volumes:
       - ./source_data:/var/lib/postgresql/data
       - ./source/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./source/updated_at.sql:/docker-entrypoint-initdb.d/updated_at.sql
 
   postgres-target:
     image: postgres:16
@@ -116,8 +117,59 @@ services:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?Set PGADMIN_PASSWORD in .env}
     volumes:
-      - ./pgadmin_data:/var/lib/pgadmin
+      - pgadmin_data:/var/lib/pgadmin
 
+  metrics-exporter:
+    image: docker:24.0-cli
+    container_name: metrics-exporter
+    depends_on:
+      connect:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      CONNECT_URL: http://connect:8083
+      LISTEN_HOST: 0.0.0.0
+      PORT: 8000
+      DOCKER_HOST: unix:///var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./scripts:/app/scripts:ro
+    working_dir: /app
+    command: >
+      sh -c "apk add --no-cache python3 && python3 /app/scripts/metrics_exporter.py --connect-url $$CONNECT_URL --listen-host $$LISTEN_HOST --port $$PORT"
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: prometheus
+    depends_on:
+      metrics-exporter:
+        condition: service_started
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: grafana
+    depends_on:
+      prometheus:
+        condition: service_started
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
 
 volumes:
   source_data: 
@@ -125,3 +177,4 @@ volumes:
   target_data:
   connect_plugins:
   kafka_data:
+  grafana_data:
