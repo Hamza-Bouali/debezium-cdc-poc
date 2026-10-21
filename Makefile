@@ -18,7 +18,7 @@ help:
 	  'make status         Show service and connector status' \
 	  'make observability  Start metrics and dashboards (Prometheus/Grafana)' \
 	  'make event-ui       Start the live source-event UI (EVENT_UI_PORT=8001)' \
-	  'make generate-events Create source changes (TABLE=customers, EVENT_COUNT=3)' \
+	  'make generate-events Create source changes (TABLE=customers, EVENT_COUNT=12)' \
 	  'make test           Run all CDC end-to-end tests' \
 	  'make test-recovery  Run the Connect restart/recovery test' \
 	  'make benchmark      Measure batch replication (BENCH_ROWS=1000)' \
