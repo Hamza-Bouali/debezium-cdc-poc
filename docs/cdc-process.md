@@ -116,6 +116,66 @@ make trace TABLE=customers
 
 The output value is the Debezium change event. Its `payload.op` identifies the operation (`c` create/insert, `u` update, `d` delete, or `r` snapshot read); `payload.before` and `payload.after` show row state when present. The Kafka key identifies the row, and the record metadata identifies its topic, partition, offset, and timestamp. The connector configurations do not enable a heartbeat or transaction metadata stream, so this trace shows row changes, not complete transaction-level lineage.
 
+### Generate Source Events
+
+The event generator makes real, committed changes in the source PostgreSQL database. It inspects the selected table's columns and PostgreSQL types, discovers its primary key, and then generates an insert followed by an update and (by default) a delete for each row. These changes flow through Debezium and Kafka like application writes; they are not synthetic records written directly to Kafka.
+
+Start the complete stack first so the source table is captured by the source connector:
+
+```bash
+make up
+```
+
+Generate events for the default `customers` table:
+
+```bash
+make generate-events
+```
+
+The Make target defaults to 12 rows and a one-second pause between changes. Choose a table, row count, and interval with Make variables:
+
+```bash
+make generate-events TABLE=customers EVENT_COUNT=3 EVENT_INTERVAL=2
+```
+
+The script can also be run directly. Its standalone defaults are three rows and a one-second interval. `--keep` leaves generated rows in the source and target instead of emitting the final delete:
+
+```bash
+python3 scripts/generate_cdc_events.py --table customers --count 2 --interval 1 --keep
+```
+
+Supported generated values include text and character strings, integer and numeric types, booleans, UUIDs, JSON/JSONB, dates, times, timestamps, intervals, bytea, arrays, network address types, XML, and PostgreSQL enums. Identity, generated, and defaulted columns are omitted from inserts. Nullable columns with unsupported types are set to `NULL`; an unsupported required type stops generation before any rows are inserted. Each generated row uses the table's primary key to target its update and delete. A primary key and at least one writable non-key column are required.
+
+This is a demo-data generator, not a general-purpose schema faker. It does not infer foreign-key relationships or arbitrary `CHECK` constraints, and unique values in application-specific columns may need custom handling. Review a table's constraints before generating data; use a disposable local database for tables with complex business rules. Generated demo strings include a random run ID; rows are deleted by default.
+
+### Visual Event Feed
+
+The browser feed is served by `scripts/event_feed_server.py` on the host; it is not a Docker Compose service. It reads the latest records from Kafka through the local Docker CLI. Start Kafka (or the full stack) and then run:
+
+```bash
+make event-ui
+```
+
+Open [http://localhost:8001](http://localhost:8001). The Make target stays in the foreground while serving the page, so leave that terminal running. Stop the UI with `Ctrl+C`; this does not stop the Compose services. Set another port if needed:
+
+```bash
+make event-ui EVENT_UI_PORT=8002
+```
+
+The page provides a source-table selector, operation filter, five-second auto-refresh, and a newest-first timeline. Select an event to inspect its key, Kafka partition and offset, before/after row images, and full Debezium record. Create/update/delete map to Debezium operations `c`, `u`, and `d`; snapshot reads use `r`; a Kafka null-value record following a delete is shown as a tombstone. The current page's table selector lists `customers` and `orders`; add an option in `web/event-feed.html` when introducing another table. An API request for a table must match its `cdc.public.<table>` Kafka topic.
+
+For a complete demo, use separate terminals after `make up`:
+
+```bash
+make event-ui
+```
+
+```bash
+make generate-events TABLE=customers EVENT_COUNT=3 EVENT_INTERVAL=2
+```
+
+The feed should show the generated changes as they arrive. `make down` stops the Compose stack; the foreground event-feed process should be stopped separately with `Ctrl+C`.
+
 ## Measure a Batch
 
 Run a local insert-and-convergence measurement:
